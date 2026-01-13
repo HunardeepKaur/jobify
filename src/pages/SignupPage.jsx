@@ -1,63 +1,84 @@
+// SignupPage.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { signupWithEmail, loginWithGoogle } from '../firebase/auth';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ToastContext';
 
+/**
+ * Signup page component
+ * - Allows new users to register via email or Google
+ * - Requires selecting user type: 'seeker' or 'employer'
+ * - Redirects authenticated users away from signup
+ */
 function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [userType, setUserType] = useState('seeker');
+  const [userType, setUserType] = useState('seeker'); // 'seeker' | 'employer'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const navigate = useNavigate();
-  const { isAuthenticated} = useAuth();
+  const { isAuthenticated } = useAuth();
   const { addToast } = useToast();
 
-  
+  // Prevent signed-in users from accessing signup
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
+  /**
+   * Handle email/password signup
+   */
   const handleEmailSignup = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      // Validate inputs
       if (!email || !password) {
-        throw new Error('Email and password are required');
-      }
-      
-      if (password.length < 6) {
-        throw new Error('Password must be at least 6 characters');
+        throw new Error('Email and password are required.');
       }
 
-      // Sign up with Firebase Auth & create Firestore document
-      
-  await signupWithEmail(email, password, userType);
-  
-  addToast(
-    `Account created successfully! Please login with your credentials.`,
-    'success'
-  );
-  
-  // REDIRECT TO LOGIN PAGE, NOT PROFILE
-  setTimeout(() => {
-    navigate('/login'); // Changed from '/seeker/profile'
-  }, 1500);
-      
-    } catch (error) {
-      console.error('Signup error:', error);
-      
-      let errorMessage = error.message;
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'An account with this email already exists. Please login.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email format.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak. Please choose a stronger password.';
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters.');
       }
-      
+
+      await signupWithEmail(email, password, userType);
+
+      addToast(`🎉 Account created! Welcome to JobPortal.`, 'success');
+
+      // Redirect based on selected user type
+      setTimeout(() => {
+        if (userType === 'seeker') {
+          navigate('/seeker/profile');
+        } else {
+          navigate('/company/profile');
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Email signup failed:', error);
+
+      let errorMessage = 'Signup failed.';
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'This email is already registered. Please log in.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email format.';
+          break;
+        case 'auth/operation-not-allowed':
+          errorMessage = 'Email signup is disabled. Try Google instead.';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'Password is too weak. Use at least 6 characters.';
+          break;
+        default:
+          errorMessage = error.message || 'An unexpected error occurred.';
+      }
+
       setError(errorMessage);
       addToast(errorMessage, 'error');
     } finally {
@@ -65,31 +86,35 @@ function SignupPage() {
     }
   };
 
+  /**
+   * Handle Google signup using selected user type
+   */
   const handleGoogleSignup = async () => {
     setError('');
     setLoading(true);
 
     try {
-      // For Google signup, use the selected userType
-      await loginWithGoogle(userType);
+      await loginWithGoogle(userType); // Reuses login function but creates account if new
       addToast(
         `Google signup successful! You are now a ${userType === 'seeker' ? 'Job Seeker' : 'Employer'}.`,
         'success'
       );
-      
+
       setTimeout(() => {
         navigate(userType === 'seeker' ? '/seeker/profile' : '/company/profile');
       }, 1000);
     } catch (error) {
-      console.error('Google signup error:', error);
-      
-      let errorMessage = error.message;
+      console.error('Google signup failed:', error);
+
+      let errorMessage = 'Google signup failed.';
       if (error.code === 'auth/popup-closed-by-user') {
         errorMessage = 'Google signup was cancelled.';
       } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = 'Popup was blocked by browser. Please allow popups for this site.';
+        errorMessage = 'Popup blocked. Please allow popups for this site.';
+      } else if (error.message) {
+        errorMessage = error.message;
       }
-      
+
       setError(errorMessage);
       addToast(errorMessage, 'error');
     } finally {
@@ -99,43 +124,37 @@ function SignupPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-emerald-50 flex items-center justify-center p-4">
-      {/* Decorative Background Shapes */}
+      {/* Background decorative shapes */}
       <div className="absolute top-10 right-10 w-64 h-64 bg-sky-100 rounded-full opacity-50 mix-blend-multiply blur-xl"></div>
       <div className="absolute bottom-10 left-10 w-64 h-64 bg-emerald-100 rounded-full opacity-50 mix-blend-multiply blur-xl"></div>
-      
+
       <div className="relative w-full max-w-md">
-        {/* Main Card */}
+        {/* Main signup card */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
-          
           {/* Header */}
-          <div className="bg-gradient-to-r from-sky-500 to-emerald-500 px-8 py-8">
-            <div className="flex items-center justify-center mb-2">
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                </svg>
-              </div>
+          <div className="bg-gradient-to-r from-sky-500 to-emerald-500 px-8 py-8 text-center">
+            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm mx-auto mb-2">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
             </div>
-            <h1 className="text-2xl font-bold text-white text-center">Join JobPortal</h1>
-            <p className="text-sky-100 text-center mt-1">Create your account</p>
+            <h1 className="text-2xl font-bold text-white">Join JobPortal</h1>
+            <p className="text-sky-100 mt-1">Create your account</p>
           </div>
-          
+
+          {/* Form content */}
           <div className="p-8">
-            {/* Error Message */}
+            {/* Global error banner */}
             {error && (
               <div className="mb-6 p-4 bg-red-50 rounded-lg border border-red-100 flex items-start">
-                <div className="flex-shrink-0 mt-0.5">
-                  <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
+                <svg className="w-5 h-5 text-red-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <p className="ml-3 text-sm text-red-700">{error}</p>
               </div>
             )}
-            
-            {/* User Type Selection - Minimal */}
+
+            {/* User type selector */}
             <div className="mb-6">
               <label className="block text-gray-700 mb-3 text-sm font-medium">I am a:</label>
               <div className="flex space-x-3">
@@ -143,7 +162,7 @@ function SignupPage() {
                   type="button"
                   onClick={() => setUserType('seeker')}
                   disabled={loading}
-                  className={`flex-1 py-3.5 rounded-xl border-2 font-medium transition-all duration-200 ${
+                  className={`flex-1 py-3.5 rounded-xl border-2 font-medium transition ${
                     userType === 'seeker'
                       ? 'border-sky-500 bg-sky-50 text-sky-700'
                       : 'border-gray-200 text-gray-700 hover:border-gray-300'
@@ -160,7 +179,7 @@ function SignupPage() {
                   type="button"
                   onClick={() => setUserType('employer')}
                   disabled={loading}
-                  className={`flex-1 py-3.5 rounded-xl border-2 font-medium transition-all duration-200 ${
+                  className={`flex-1 py-3.5 rounded-xl border-2 font-medium transition ${
                     userType === 'employer'
                       ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
                       : 'border-gray-200 text-gray-700 hover:border-gray-300'
@@ -175,17 +194,15 @@ function SignupPage() {
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-2 text-center">
-                {userType === 'seeker' 
-                  ? 'Looking for job opportunities' 
-                  : 'Looking to hire talent'}
+                {userType === 'seeker' ? 'Looking for job opportunities' : 'Looking to hire talent'}
               </p>
             </div>
-            
-            {/* Google Signup Button */}
+
+            {/* Google signup button */}
             <button
               onClick={handleGoogleSignup}
               disabled={loading}
-              className="w-full flex items-center justify-center bg-white text-gray-700 border border-gray-200 rounded-xl py-3.5 px-4 mb-6 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-all duration-200 shadow-sm hover:shadow"
+              className="w-full flex items-center justify-center bg-white text-gray-700 border border-gray-200 rounded-xl py-3.5 px-4 mb-6 hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
             >
               {loading ? (
                 <span className="flex items-center">
@@ -194,16 +211,16 @@ function SignupPage() {
                 </span>
               ) : (
                 <>
-                  <img 
-                    src="https://www.google.com/favicon.ico" 
-                    alt="Google" 
+                  <img
+                    src="https://www.google.com/favicon.ico" // ✅ Fixed: no trailing spaces
+                    alt="Google"
                     className="w-5 h-5 mr-3"
                   />
                   <span className="font-medium">Sign up with Google</span>
                 </>
               )}
             </button>
-            
+
             {/* Divider */}
             <div className="relative mb-6">
               <div className="absolute inset-0 flex items-center">
@@ -213,34 +230,30 @@ function SignupPage() {
                 <span className="px-4 bg-white text-gray-500">Or sign up with email</span>
               </div>
             </div>
-            
-            {/* Email/Password Form */}
+
+            {/* Email/password form */}
             <form onSubmit={handleEmailSignup}>
               <div className="mb-5">
-                <label className="block text-gray-700 mb-2 text-sm font-medium">
-                  Email Address
-                </label>
+                <label className="block text-gray-700 mb-2 text-sm font-medium">Email Address</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
-                  className="w-full p-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-transparent disabled:opacity-50 transition placeholder-gray-400"
+                  className="w-full p-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-300 placeholder-gray-400"
                   placeholder="you@example.com"
                   required
                 />
               </div>
-              
+
               <div className="mb-6">
-                <label className="block text-gray-700 mb-2 text-sm font-medium">
-                  Password
-                </label>
+                <label className="block text-gray-700 mb-2 text-sm font-medium">Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
-                  className="w-full p-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-transparent disabled:opacity-50 transition placeholder-gray-400"
+                  className="w-full p-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-300 placeholder-gray-400"
                   placeholder="At least 6 characters"
                   minLength="6"
                   required
@@ -250,11 +263,11 @@ function SignupPage() {
                   <p className="text-xs text-gray-500">Minimum 6 characters</p>
                 </div>
               </div>
-              
+
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-sky-500 to-emerald-500 text-white py-3.5 rounded-xl font-medium hover:from-sky-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow"
+                className="w-full bg-gradient-to-r from-sky-500 to-emerald-500 text-white py-3.5 rounded-xl font-medium hover:from-sky-600 hover:to-emerald-600 disabled:opacity-50 transition shadow"
               >
                 {loading ? (
                   <span className="flex items-center justify-center">
@@ -264,29 +277,24 @@ function SignupPage() {
                 ) : 'Create Account'}
               </button>
             </form>
-            
-            {/* Login Link */}
-            <div className="mt-8 pt-6 border-t border-gray-100">
-              <p className="text-center text-gray-600 text-sm">
+
+            {/* Login link */}
+            <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+              <p className="text-gray-600 text-sm">
                 Already have an account?{' '}
-                <Link 
-                  to="/login" 
-                  className="text-sky-600 hover:text-sky-800 font-medium hover:underline"
-                >
+                <Link to="/login" className="text-sky-600 hover:underline font-medium">
                   Login
                 </Link>
               </p>
-              
-              <p className="text-center text-gray-500 text-xs mt-4">
+              <p className="text-gray-500 text-xs mt-4">
                 By creating an account, you agree to our{' '}
-                <a href="#" className="text-sky-600 hover:underline">Terms</a>
-                {' '}and{' '}
+                <a href="#" className="text-sky-600 hover:underline">Terms</a> and{' '}
                 <a href="#" className="text-sky-600 hover:underline">Privacy Policy</a>
               </p>
             </div>
           </div>
         </div>
-        
+
         {/* Footer */}
         <div className="mt-6 text-center">
           <p className="text-gray-500 text-sm">Start your journey with JobPortal today</p>

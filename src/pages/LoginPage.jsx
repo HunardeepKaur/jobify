@@ -2,7 +2,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { loginWithGoogle, loginWithEmail } from '../firebase/auth';
 import { useAuth } from '../context/AuthContext';
 import { useState, useEffect } from 'react';
-import RoleSelectionModal from '../components/RoleSelectionModal'; // Changed from named import to default import
+import RoleSelectionModal from '../components/RoleSelectionModal'; // Changed to named import
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -11,6 +11,7 @@ function LoginPage() {
   const [error, setError] = useState('');
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [googleLoginPending, setGoogleLoginPending] = useState(false);
   
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
@@ -48,7 +49,18 @@ function LoginPage() {
       setToastMessage(`❌ ${errorMessage}`);
     } finally {
       setLoading(false);
+      setGoogleLoginPending(false);
     }
+  };
+
+  const initiateGoogleLogin = () => {
+    setGoogleLoginPending(true);
+    setShowRoleModal(true);
+  };
+
+  const handleRoleSelection = (role) => {
+    setShowRoleModal(false);
+    handleGoogleLogin(role);
   };
 
   const handleEmailLogin = async (e) => {
@@ -154,11 +166,11 @@ function LoginPage() {
               
               {/* Google Login Button */}
               <button
-                onClick={() => setShowRoleModal(true)}
+                onClick={initiateGoogleLogin}
                 disabled={loading}
                 className="w-full flex items-center justify-center bg-white text-gray-700 border border-gray-200 rounded-xl py-3.5 px-4 mb-6 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-all duration-200 shadow-sm hover:shadow"
               >
-                {loading ? (
+                {loading && googleLoginPending ? (
                   <span className="flex items-center">
                     <div className="w-5 h-5 border-2 border-gray-300 border-t-sky-500 rounded-full animate-spin mr-2"></div>
                     Loading...
@@ -175,7 +187,7 @@ function LoginPage() {
                 )}
               </button>
               
-              {/* Divider */}
+              {/* Rest of the component remains the same... */}
               <div className="relative mb-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>
@@ -269,17 +281,16 @@ function LoginPage() {
       </div>
 
       {/* Role Selection Modal */}
-      <RoleSelectionModal
-        isOpen={showRoleModal}
-        onSelect={(role) => {
-          setShowRoleModal(false);
-          handleGoogleLogin(role);
-        }}
-        onClose={() => {
-          setShowRoleModal(false);
-          setLoading(false);
-        }}
-      />
+      {showRoleModal && (
+        <RoleSelectionModal
+          isOpen={showRoleModal}
+          onSelect={handleRoleSelection}
+          onClose={() => {
+            setShowRoleModal(false);
+            setGoogleLoginPending(false);
+          }}
+        />
+      )}
     </>
   );
 }

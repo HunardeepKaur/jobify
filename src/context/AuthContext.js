@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { getUserProfile } from '../firebase/profile'; // IMPORT THIS
+import { getUserProfile } from '../firebase/profile';
 
 const AuthContext = createContext({});
 
@@ -12,6 +12,7 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // NEW: Refresh state
   const [profileCompleted, setProfileCompleted] = useState(false);
   const [profileData, setProfileData] = useState(null);
   const [isSigningUp, setIsSigningUp] = useState(false);
@@ -19,22 +20,37 @@ export const AuthProvider = ({ children }) => {
   // Function to load user profile data
   const loadUserProfile = async (userId) => {
     try {
-      console.log('Loading profile for user:', userId);
+      console.log('🚀 Loading profile for user:', userId);
       const profile = await getUserProfile(userId);
       
       if (profile) {
-        console.log('Profile loaded successfully:', profile);
-        setProfileData(profile);
+        console.log('✅ Profile loaded successfully:', {
+          hasPhoto: !!profile.photoURL,
+          photoURL: profile.photoURL,
+          hasResume: !!profile.resumeURL,
+          resumeURL: profile.resumeURL,
+          fullName: profile.fullName
+        });
+        
+        // FORCE STATE UPDATE - Use functional update
+        setProfileData(prev => {
+          console.log('🔄 Updating profileData state');
+          return profile;
+        });
+        
         setProfileCompleted(profile.profileCompleted || false);
+        return profile; // RETURN THE PROFILE
       } else {
-        console.log('No profile data found');
+        console.log('❌ No profile data found');
         setProfileData(null);
         setProfileCompleted(false);
+        return null;
       }
     } catch (error) {
-      console.error('Error loading user profile:', error);
+      console.error('❌ Error loading user profile:', error);
       setProfileData(null);
       setProfileCompleted(false);
+      throw error;
     }
   };
 
@@ -50,8 +66,10 @@ export const AuthProvider = ({ children }) => {
       
       // Set a timer to wait for auth state to stabilize
       authChangeTimer = setTimeout(async () => {
+        console.log('🔄 Auth state changed, user:', user?.email);
+        
         if (user) {
-          // User is signed in (and stayed signed in for 300ms)
+          // User is signed in
           const userData = {
             uid: user.uid,
             email: user.email,
@@ -69,7 +87,7 @@ export const AuthProvider = ({ children }) => {
             
             if (userDoc.exists()) {
               const userData = userDoc.data();
-              console.log('User data from Firestore:', userData);
+              console.log('📋 User data from Firestore:', userData);
               
               setUserRole(userData.userType || null);
               setProfileCompleted(userData.profileCompleted || false);
@@ -77,18 +95,20 @@ export const AuthProvider = ({ children }) => {
               // Load detailed profile data
               await loadUserProfile(user.uid);
             } else {
+              console.log('⚠️ No Firestore document found');
               setUserRole(null);
               setProfileCompleted(false);
               setProfileData(null);
             }
           } catch (error) {
-            console.error('Error fetching user data:', error);
+            console.error('❌ Error fetching user data:', error);
             setUserRole(null);
             setProfileCompleted(false);
             setProfileData(null);
           }
         } else {
-          // User is signed out (and stayed signed out for 300ms)
+          // User is signed out
+          console.log('👋 User signed out');
           setCurrentUser(null);
           setUserRole(null);
           setProfileCompleted(false);
@@ -108,18 +128,42 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Function to manually refresh profile data
+  // Function to manually refresh profile data - FIXED VERSION
   const refreshProfileData = async () => {
-    if (currentUser?.uid) {
-      await loadUserProfile(currentUser.uid);
+    if (!currentUser?.uid) {
+      console.log('❌ Cannot refresh: No user logged in');
+      return null;
+    }
+    
+    console.log('🔄 REFRESHING PROFILE DATA...');
+    setRefreshing(true);
+    
+    try {
+      const freshProfile = await loadUserProfile(currentUser.uid);
+      console.log('✅ Refresh complete:', freshProfile);
+      return freshProfile; // CRITICAL: Return the data
+    } catch (error) {
+      console.error('❌ Error refreshing profile:', error);
+      throw error;
+    } finally {
+      setRefreshing(false);
     }
   };
 
-  // Context value - ADD refreshProfileData
+  // NEW: Function to force update specific fields
+  const updateProfileField = (field, value) => {
+    setProfileData(prev => {
+      if (!prev) return { [field]: value };
+      return { ...prev, [field]: value };
+    });
+  };
+
+  // Context value
   const value = {
     currentUser,
     userRole,
     loading,
+    refreshing, // NEW: Expose refreshing state
     profileCompleted,
     profileData,
     isAuthenticated: !!currentUser,
@@ -128,7 +172,8 @@ export const AuthProvider = ({ children }) => {
     setProfileCompleted,
     setProfileData,
     setIsSigningUp,
-    refreshProfileData, // ADD THIS FUNCTION
+    refreshProfileData,
+    updateProfileField, // NEW: Direct field update
   };
 
   return (

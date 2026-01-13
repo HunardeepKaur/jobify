@@ -8,24 +8,19 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 
-// 1️⃣ Create user document in Firestore
-// 1️⃣ Create user document in Firestore
 export const createUserDocument = async (user, additionalData = {}) => {
   if (!user) return;
 
   try {
-    // Reference to the user document
     const userRef = doc(db, 'users', user.uid);
     
-    // Check if document already exists
     const userSnapshot = await getDoc(userRef);
     
     if (!userSnapshot.exists()) {
-      // Create new user document
       await setDoc(userRef, {
         uid: user.uid,
         email: user.email,
-        fullName: user.fullName || user.displayName || '', // CHANGE: Use fullName
+        fullName: user.fullName  || '', 
         photoURL: user.photoURL || '',
         userType: additionalData.userType || 'seeker',
         profileCompleted: false,
@@ -36,7 +31,6 @@ export const createUserDocument = async (user, additionalData = {}) => {
       
       console.log('✅ User document created in Firestore');
     } else {
-      // Update last login for existing user
       await updateDoc(userRef, {
         lastLogin: serverTimestamp()
       });
@@ -49,7 +43,6 @@ export const createUserDocument = async (user, additionalData = {}) => {
   }
 };
 
-// 2️⃣ Get user data from Firestore
 export const getUserDocument = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
@@ -67,7 +60,6 @@ export const getUserDocument = async (userId) => {
   }
 };
 
-// 3️⃣ Update user profile completion status
 export const updateProfileCompletion = async (userId, isCompleted = true) => {
   try {
     const userRef = doc(db, 'users', userId);

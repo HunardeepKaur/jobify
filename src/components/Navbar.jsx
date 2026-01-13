@@ -2,9 +2,12 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { logoutUser } from '../firebase/auth';
 import { useState, useRef, useEffect } from 'react';
+import { getCloudinaryDownloadUrl, verifyDownloadUrl, logDownloadFallback } from '../services/cloudinary';
+import { useToast } from './ToastContext';
 
 function Navbar() {
   const { currentUser, userRole, loading, profileData } = useAuth();
+  const { addToast } = useToast();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -27,14 +30,18 @@ function Navbar() {
 
   // Get user's first initial for avatar
   const getUserInitial = () => {
-    if (profileData?.displayName) {
-      return profileData.displayName.charAt(0).toUpperCase();
-    }
-    if (currentUser?.email) {
-      return currentUser.email.charAt(0).toUpperCase();
-    }
-    return 'U';
-  };
+  // First try to use photo if available
+  if (profileData?.photoURL) {
+    return null; // Will show image instead
+  }
+  if (profileData?.displayName) {
+    return profileData.displayName.charAt(0).toUpperCase();
+  }
+  if (currentUser?.email) {
+    return currentUser.email.charAt(0).toUpperCase();
+  }
+  return 'U';
+};
 
   // Truncate text function
   const truncateText = (text, maxLength) => {
@@ -99,26 +106,46 @@ function Navbar() {
                 </div>
                 
                 {/* Mobile Only - Simple Avatar */}
-                <div className="md:hidden flex items-center space-x-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    userRole === 'seeker' 
-                      ? 'bg-gradient-to-br from-sky-400 to-sky-500 text-white' 
-                      : 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-white'
-                  }`}>
-                    <span className="font-semibold text-sm">{getUserInitial()}</span>
-                  </div>
-                </div>
+                {/* Mobile Only - Simple Avatar */}
+<div className="md:hidden flex items-center space-x-2">
+  <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${
+    userRole === 'seeker' 
+      ? 'bg-gradient-to-br from-sky-400 to-sky-500' 
+      : 'bg-gradient-to-br from-emerald-400 to-emerald-500'
+  }`}>
+    {profileData?.photoURL ? (
+      <img 
+        src={profileData.photoURL} 
+        alt="Profile" 
+        className="w-full h-full object-cover"
+        crossOrigin="anonymous"
+      />
+    ) : (
+      <span className="font-semibold text-sm text-white">{getUserInitial()}</span>
+    )}
+  </div>
+</div>
                 
                 {/* Desktop Avatar */}
-                <div className="hidden md:flex">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 ${
-                    userRole === 'seeker' 
-                      ? 'border-sky-200 bg-gradient-to-br from-sky-100 to-sky-50 text-sky-600' 
-                      : 'border-emerald-200 bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-600'
-                  }`}>
-                    <span className="font-semibold text-sm">{getUserInitial()}</span>
-                  </div>
-                </div>
+{/* Desktop Avatar */}
+<div className="hidden md:flex">
+  <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 overflow-hidden ${
+    userRole === 'seeker' 
+      ? 'border-sky-200' 
+      : 'border-emerald-200'
+  } ${!profileData?.photoURL ? (userRole === 'seeker' ? 'bg-gradient-to-br from-sky-100 to-sky-50 text-sky-600' : 'bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-600') : ''}`}>
+    {profileData?.photoURL ? (
+      <img 
+        src={profileData.photoURL} 
+        alt="Profile" 
+        className="w-full h-full object-cover"
+        crossOrigin="anonymous"
+      />
+    ) : (
+      <span className="font-semibold text-sm">{getUserInitial()}</span>
+    )}
+  </div>
+</div>
                 
                 {/* Arrow Icon */}
                 <svg 
@@ -230,14 +257,34 @@ function Navbar() {
                     </Link>
                     
                     {/* Resume Download */}
-                    {profileData?.resumeURL && (
-                      <a 
-                        href={profileData.resumeURL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setDropdownOpen(false)}
-                        className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
-                      >
+                    {profileData?.resumeURL && ( <button 
+    onClick={async (e) => {
+      e.preventDefault();
+      setDropdownOpen(false);
+
+      const fileName = profileData.resumeFileName || 'resume.pdf';
+      const candidate = profileData.resumeURL && profileData.resumeURL.includes('cloudinary.com')
+        ? getCloudinaryDownloadUrl(profileData.resumeURL, fileName)
+        : profileData.resumeURL;
+
+      const ok = await verifyDownloadUrl(candidate);
+
+      if (ok) {
+        const link = document.createElement('a');
+        link.href = candidate;
+        link.download = fileName;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        window.open(profileData.resumeURL, '_blank', 'noopener,noreferrer');
+        addToast('Download failed; opened resume in a new tab.', 'warning');
+        try { logDownloadFallback(profileData.resumeURL, candidate, fileName, 'verify_failed'); } catch (e) { /* ignore */ }
+      }
+    }}
+    className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group text-left"
+  >
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-emerald-100 to-emerald-50 text-emerald-600 flex items-center justify-center mr-3">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -249,7 +296,7 @@ function Navbar() {
                             {profileData.resumeFileName || 'Resume.pdf'}
                           </p>
                         </div>
-                      </a>
+                      </button>
                     )}
                     
                     {/* Divider */}
