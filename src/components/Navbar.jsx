@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { downloadFileFromCloudinary } from "../services/cloudinary";
 import { useToast } from "./ToastContext";
 
-// Optional: Define role constants (best practice)
+// Role constants
 const USER_ROLES = {
   SEEKER: "seeker",
   EMPLOYER: "employer",
@@ -42,29 +42,32 @@ function Navbar() {
     }
   };
 
-  // Get user's first initial for avatar
-  const getUserInitial = () => {
-    if (profileData?.fullName) {
-      return profileData.fullName.charAt(0).toUpperCase();
-    }
-    if (profileData?.displayName) {
-      return profileData.displayName.charAt(0).toUpperCase();
-    }
-    if (currentUser?.email) {
-      return currentUser.email.charAt(0).toUpperCase();
-    }
-    return "U";
-  };
-
-  // Get display name for navbar
+  // ✅ FIXED: Role-aware display name
   const getDisplayName = () => {
-    if (profileData?.fullName) {
+    if (userRole === USER_ROLES.EMPLOYER && profileData?.companyName) {
+      return profileData.companyName;
+    }
+    if (userRole === USER_ROLES.SEEKER && profileData?.fullName) {
       return profileData.fullName;
     }
-    if (profileData?.displayName) {
-      return profileData.displayName;
+    return currentUser?.email ? currentUser.email.split('@')[0] : 'User';
+  };
+
+  // ✅ FIXED: Role-aware profile image
+  const getProfileImage = () => {
+    if (userRole === USER_ROLES.EMPLOYER) {
+      return (profileData?.logoURL || '').trim(); // Trim to fix trailing spaces
     }
-    return "User";
+    if (userRole === USER_ROLES.SEEKER) {
+      return profileData?.photoURL || '';
+    }
+    return '';
+  };
+
+  // ✅ FIXED: Initial based on display name
+  const getUserInitial = () => {
+    const name = getDisplayName();
+    return name.charAt(0).toUpperCase();
   };
 
   // Truncate text function
@@ -77,9 +80,10 @@ function Navbar() {
   // Handle broken profile images
   const handleImageError = (e) => {
     e.target.style.display = "none";
-    const fallbackId = e.target.parentElement.querySelector('[id$="initial-fallback"]');
-    if (fallbackId) {
-      fallbackId.classList.remove("hidden");
+    const parent = e.target.closest('.relative');
+    if (parent) {
+      const fallback = parent.querySelector('[data-fallback]');
+      if (fallback) fallback.classList.remove("hidden");
     }
   };
 
@@ -173,19 +177,18 @@ function Navbar() {
                         : "bg-gradient-to-br from-emerald-400 to-emerald-500"
                     } relative`}
                   >
-                    {profileData?.photoURL ? (
+                    {getProfileImage() ? (
                       <>
                         <img
-                          src={profileData.photoURL}
+                          src={getProfileImage()}
                           alt="Profile"
                           className="w-full h-full object-cover"
                           crossOrigin="anonymous"
                           onError={handleImageError}
                         />
-                        {/* Fallback layer */}
                         <span
                           className="absolute inset-0 flex items-center justify-center font-semibold text-sm text-white hidden"
-                          id="mobile-initial-fallback"
+                          data-fallback
                         >
                           {getUserInitial()}
                         </span>
@@ -206,26 +209,25 @@ function Navbar() {
                         ? "border-sky-200"
                         : "border-emerald-200"
                     } ${
-                      !profileData?.photoURL
+                      !getProfileImage()
                         ? userRole === USER_ROLES.SEEKER
                           ? "bg-gradient-to-br from-sky-100 to-sky-50 text-sky-600"
                           : "bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-600"
                         : ""
                     }`}
                   >
-                    {profileData?.photoURL ? (
+                    {getProfileImage() ? (
                       <>
                         <img
-                          src={profileData.photoURL}
+                          src={getProfileImage()}
                           alt="Profile"
                           className="w-full h-full object-cover"
                           crossOrigin="anonymous"
                           onError={handleImageError}
                         />
-                        {/* Fallback shown if img fails */}
                         <span
                           className="absolute inset-0 flex items-center justify-center font-semibold text-sm hidden"
-                          id="desktop-initial-fallback"
+                          data-fallback
                         >
                           {getUserInitial()}
                         </span>
@@ -270,19 +272,18 @@ function Navbar() {
                             : "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white"
                         }`}
                       >
-                        {profileData?.photoURL ? (
+                        {getProfileImage() ? (
                           <>
                             <img
-                              src={profileData.photoURL}
+                              src={getProfileImage()}
                               alt="Profile"
                               className="w-full h-full object-cover"
                               crossOrigin="anonymous"
                               onError={handleImageError}
                             />
-                            {/* Fallback if image fails */}
                             <span
                               className="absolute inset-0 flex items-center justify-center font-semibold text-lg hidden"
-                              id="dropdown-initial-fallback"
+                              data-fallback
                             >
                               {getUserInitial()}
                             </span>
@@ -302,7 +303,7 @@ function Navbar() {
                         <p className="text-xs text-gray-600 mb-2 truncate">
                           {currentUser?.email || ""}
                         </p>
-                        {profileData?.headline && (
+                        {userRole === USER_ROLES.SEEKER && profileData?.headline && (
                           <p className="text-xs text-gray-500 mb-2 truncate">
                             {truncateText(profileData.headline, 40)}
                           </p>
@@ -390,36 +391,37 @@ function Navbar() {
                     </Link>
 
                     {/* Dashboard */}
-                    <Link
-                      to="/dashboard"
-                      onClick={() => setDropdownOpen(false)}
-                      className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-blue-100 to-blue-50 text-blue-600 flex items-center justify-center mr-3 flex-shrink-0">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                          />
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900">Dashboard</p>
-                        <p className="text-xs text-gray-500 truncate">
-                          View your dashboard
-                        </p>
-                      </div>
-                    </Link>
+                    {/* Dashboard */}
+<Link
+  to={userRole === USER_ROLES.SEEKER ? "/seeker/dashboard" : "/employer/dashboard"}
+  onClick={() => setDropdownOpen(false)}
+  className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+>
+  <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-blue-100 to-blue-50 text-blue-600 flex items-center justify-center mr-3 flex-shrink-0">
+    <svg
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+      />
+    </svg>
+  </div>
+  <div className="flex-1 min-w-0">
+    <p className="font-medium text-gray-900">Dashboard</p>
+    <p className="text-xs text-gray-500 truncate">
+      View your dashboard
+    </p>
+  </div>
+</Link>
 
-                    {/* Resume Download */}
-                    {profileData?.resumeURL && (
+                    {/* Resume Download (only for seekers) */}
+                    {userRole === USER_ROLES.SEEKER && profileData?.resumeURL && (
                       <button
                         onClick={async (e) => {
                           e.preventDefault();

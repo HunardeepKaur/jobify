@@ -1,4 +1,3 @@
-// src/pages/SignupPage.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { signupWithEmail, loginWithGoogle } from '../firebase/auth';
@@ -13,14 +12,19 @@ function SignupPage() {
   const [error, setError] = useState('');
 
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, userRole } = useAuth(); // Get userRole from context
   const { addToast } = useToast();
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+      // Redirect based on role
+      if (userRole === 'seeker') {
+        navigate('/seeker/dashboard', { replace: true });
+      } else if (userRole === 'employer') {
+        navigate('/employer/dashboard', { replace: true });
+      }
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, userRole, navigate]);
 
   const handleEmailSignup = async (e) => {
     e.preventDefault();
@@ -35,12 +39,11 @@ function SignupPage() {
         throw new Error('Password must be at least 6 characters.');
       }
 
-      await signupWithEmail(email, password, userType); // Must save role to DB inside this function
+      await signupWithEmail(email, password, userType);
       addToast(`🎉 Account created! Welcome to JobPortal.`, 'success');
 
-      setTimeout(() => {
-        navigate('/dashboard', { replace: true });
-      }, 1200);
+      // Wait for auth state to update, then redirect will happen in useEffect
+      // based on the userRole from AuthContext
     } catch (error) {
       console.error('Email signup failed:', error);
       let message = 'Signup failed.';
@@ -68,14 +71,12 @@ function SignupPage() {
     setError('');
     setLoading(true);
     try {
-      await loginWithGoogle(userType); // Pass role so backend can save it if new user
+      await loginWithGoogle(userType);
       addToast(
         `Google account linked as ${userType === 'seeker' ? 'Job Seeker' : 'Employer'}.`,
         'success'
       );
-      setTimeout(() => {
-        navigate('/dashboard', { replace: true });
-      }, 1000);
+      // Redirect will happen in useEffect based on userRole
     } catch (error) {
       console.error('Google signup failed:', error);
       let message = 'Google signup failed.';

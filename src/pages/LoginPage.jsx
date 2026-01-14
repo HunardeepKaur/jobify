@@ -1,4 +1,3 @@
-// src/pages/LoginPage.jsx
 import { useNavigate, Link } from 'react-router-dom';
 import { loginWithGoogle, loginWithEmail } from '../firebase/auth';
 import { useAuth } from '../context/AuthContext';
@@ -12,23 +11,28 @@ function LoginPage() {
   const [error, setError] = useState('');
 
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, userRole } = useAuth(); // Get userRole from context
   const { addToast } = useToast();
 
   // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+      // Redirect based on user role
+      if (userRole === 'seeker') {
+        navigate('/seeker/dashboard', { replace: true });
+      } else if (userRole === 'employer') {
+        navigate('/employer/dashboard', { replace: true });
+      } 
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, userRole, navigate]);
 
   const handleGoogleLogin = async () => {
     setError('');
     setLoading(true);
     try {
-      await loginWithGoogle(); // No role passed — role is fetched from DB after login
+      await loginWithGoogle();
       addToast('✅ Login successful! Redirecting...', 'success');
-      setTimeout(() => navigate('/dashboard'), 1000);
+      // Redirect will happen in useEffect based on userRole
     } catch (error) {
       console.error('Google login failed:', error);
       let message = 'Google login failed.';
@@ -56,7 +60,7 @@ function LoginPage() {
 
       await loginWithEmail(email, password);
       addToast('✅ Login successful! Redirecting...', 'success');
-      setTimeout(() => navigate('/dashboard'), 1000);
+      // Redirect will happen in useEffect based on userRole
     } catch (error) {
       console.error('Email login failed:', error);
       let message = 'Login failed.';
