@@ -5,10 +5,10 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import { ToastProvider } from '../src/components/ToastContext';
-import { RoleSelectionModal } from '../src/components/RoleSelectionModal';
 import SeekerProfilePage from './pages/SeekerProfilePage';
 import Dashboard from './pages/Dashboard';
 import SeekerProfileView from './pages/SeekerProfileView';
+
 
 
 // Simple Forgot Password Page

@@ -1,16 +1,10 @@
-// SignupPage.jsx
+// src/pages/SignupPage.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { signupWithEmail, loginWithGoogle } from '../firebase/auth';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ToastContext';
 
-/**
- * Signup page component
- * - Allows new users to register via email or Google
- * - Requires selecting user type: 'seeker' or 'employer'
- * - Redirects authenticated users away from signup
- */
 function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,16 +16,12 @@ function SignupPage() {
   const { isAuthenticated } = useAuth();
   const { addToast } = useToast();
 
-  // Prevent signed-in users from accessing signup
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
-  /**
-   * Handle email/password signup
-   */
   const handleEmailSignup = async (e) => {
     e.preventDefault();
     setError('');
@@ -41,82 +31,63 @@ function SignupPage() {
       if (!email || !password) {
         throw new Error('Email and password are required.');
       }
-
       if (password.length < 6) {
         throw new Error('Password must be at least 6 characters.');
       }
 
-      await signupWithEmail(email, password, userType);
-
+      await signupWithEmail(email, password, userType); // Must save role to DB inside this function
       addToast(`🎉 Account created! Welcome to JobPortal.`, 'success');
 
-      // Redirect based on selected user type
       setTimeout(() => {
-        if (userType === 'seeker') {
-          navigate('/seeker/profile');
-        } else {
-          navigate('/company/profile');
-        }
-      }, 1500);
+        navigate('/dashboard', { replace: true });
+      }, 1200);
     } catch (error) {
       console.error('Email signup failed:', error);
-
-      let errorMessage = 'Signup failed.';
+      let message = 'Signup failed.';
       switch (error.code) {
         case 'auth/email-already-in-use':
-          errorMessage = 'This email is already registered. Please log in.';
+          message = 'This email is already registered.';
           break;
         case 'auth/invalid-email':
-          errorMessage = 'Invalid email format.';
-          break;
-        case 'auth/operation-not-allowed':
-          errorMessage = 'Email signup is disabled. Try Google instead.';
+          message = 'Invalid email format.';
           break;
         case 'auth/weak-password':
-          errorMessage = 'Password is too weak. Use at least 6 characters.';
+          message = 'Password too weak (min 6 chars).';
           break;
         default:
-          errorMessage = error.message || 'An unexpected error occurred.';
+          message = error.message || 'An unexpected error occurred.';
       }
-
-      setError(errorMessage);
-      addToast(errorMessage, 'error');
+      setError(message);
+      addToast(message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Handle Google signup using selected user type
-   */
   const handleGoogleSignup = async () => {
     setError('');
     setLoading(true);
-
     try {
-      await loginWithGoogle(userType); // Reuses login function but creates account if new
+      await loginWithGoogle(userType); // Pass role so backend can save it if new user
       addToast(
-        `Google signup successful! You are now a ${userType === 'seeker' ? 'Job Seeker' : 'Employer'}.`,
+        `Google account linked as ${userType === 'seeker' ? 'Job Seeker' : 'Employer'}.`,
         'success'
       );
-
       setTimeout(() => {
-        navigate(userType === 'seeker' ? '/seeker/profile' : '/company/profile');
+        navigate('/dashboard', { replace: true });
       }, 1000);
     } catch (error) {
       console.error('Google signup failed:', error);
-
-      let errorMessage = 'Google signup failed.';
+      let message = 'Google signup failed.';
       if (error.code === 'auth/popup-closed-by-user') {
-        errorMessage = 'Google signup was cancelled.';
+        message = 'Cancelled by user.';
       } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = 'Popup blocked. Please allow popups for this site.';
-      } else if (error.message) {
-        errorMessage = error.message;
+        message = 'Popup blocked. Allow popups.';
+      } else {
+        message = error.message || 'Unexpected error.';
       }
-
-      setError(errorMessage);
-      addToast(errorMessage, 'error');
+      setError(message);
+      addToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -124,14 +95,11 @@ function SignupPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-emerald-50 flex items-center justify-center p-4">
-      {/* Background decorative shapes */}
       <div className="absolute top-10 right-10 w-64 h-64 bg-sky-100 rounded-full opacity-50 mix-blend-multiply blur-xl"></div>
       <div className="absolute bottom-10 left-10 w-64 h-64 bg-emerald-100 rounded-full opacity-50 mix-blend-multiply blur-xl"></div>
 
       <div className="relative w-full max-w-md">
-        {/* Main signup card */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
-          {/* Header */}
           <div className="bg-gradient-to-r from-sky-500 to-emerald-500 px-8 py-8 text-center">
             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm mx-auto mb-2">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,9 +110,7 @@ function SignupPage() {
             <p className="text-sky-100 mt-1">Create your account</p>
           </div>
 
-          {/* Form content */}
           <div className="p-8">
-            {/* Global error banner */}
             {error && (
               <div className="mb-6 p-4 bg-red-50 rounded-lg border border-red-100 flex items-start">
                 <svg className="w-5 h-5 text-red-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -154,7 +120,6 @@ function SignupPage() {
               </div>
             )}
 
-            {/* User type selector */}
             <div className="mb-6">
               <label className="block text-gray-700 mb-3 text-sm font-medium">I am a:</label>
               <div className="flex space-x-3">
@@ -198,7 +163,6 @@ function SignupPage() {
               </p>
             </div>
 
-            {/* Google signup button */}
             <button
               onClick={handleGoogleSignup}
               disabled={loading}
@@ -212,7 +176,7 @@ function SignupPage() {
               ) : (
                 <>
                   <img
-                    src="https://www.google.com/favicon.ico" // ✅ Fixed: no trailing spaces
+                    src="https://www.google.com/favicon.ico"
                     alt="Google"
                     className="w-5 h-5 mr-3"
                   />
@@ -221,7 +185,6 @@ function SignupPage() {
               )}
             </button>
 
-            {/* Divider */}
             <div className="relative mb-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-200"></div>
@@ -231,7 +194,6 @@ function SignupPage() {
               </div>
             </div>
 
-            {/* Email/password form */}
             <form onSubmit={handleEmailSignup}>
               <div className="mb-5">
                 <label className="block text-gray-700 mb-2 text-sm font-medium">Email Address</label>
@@ -278,7 +240,6 @@ function SignupPage() {
               </button>
             </form>
 
-            {/* Login link */}
             <div className="mt-8 pt-6 border-t border-gray-100 text-center">
               <p className="text-gray-600 text-sm">
                 Already have an account?{' '}
@@ -295,7 +256,6 @@ function SignupPage() {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="mt-6 text-center">
           <p className="text-gray-500 text-sm">Start your journey with JobPortal today</p>
         </div>

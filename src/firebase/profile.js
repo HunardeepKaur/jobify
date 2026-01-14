@@ -1,228 +1,164 @@
-import { 
-  doc, 
-  updateDoc, 
-  getDoc, 
-  serverTimestamp,
-  setDoc 
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { db, storage } from './config';
+// src/firebase/profile.js
+import { doc, updateDoc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { uploadToCloudinary } from '../services/cloudinary';
+import { db } from './config';
 
-// Generic file upload function
-// firebase/profile.js - Update the uploadFile function
+// In your profile.js file, update the uploadFile function:
 const uploadFile = async (userId, file, folder) => {
   try {
-    console.log(`📤 Uploading ${file.name} (${file.type}) to Cloudinary...`);
-    
-    // Use the dedicated Cloudinary service
+    console.log('📤 Starting file upload to Cloudinary:', {
+      userId,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+      folder: `jobportal/${folder}`
+    });
+
     const result = await uploadToCloudinary(file, `jobportal/${folder}`);
     
-    console.log(`✅ Upload successful - Resource type: ${result.resourceType || 'auto'}`);
+    console.log('✅ File uploaded successfully:', {
+      originalUrl: result.url,
+      fileName: result.fileName,
+      fileType: result.fileType
+    });
     
     return {
       url: result.url,
-      fileName: file.name,
+      fileName: result.fileName,
       publicId: result.publicId,
-      resourceType: result.resourceType
     };
-    
   } catch (error) {
-    console.error(`❌ Upload error:`, error);
+    console.error('❌ Upload error:', error);
     throw error;
   }
 };
 
-// Delete old file if exists
-const deleteOldFile = async (storagePath) => {
-  try {
-    if (!storagePath) return;
-    
-    const oldFileRef = ref(storage, storagePath);
-    await deleteObject(oldFileRef);
-    console.log('✅ Old file deleted:', storagePath);
-  } catch (error) {
-    // Don't throw error if file doesn't exist
-    if (error.code !== 'storage/object-not-found') {
-      console.error('⚠️ Error deleting old file:', error);
-    }
-  }
-};
-
-// Upload resume (for backward compatibility)
-export const uploadResume = async (userId, file) => {
-  const result = await uploadFile(userId, file, 'resumes');
-  return result?.url || null;
-};
-
-// Upload profile photo
-export const uploadProfilePhoto = async (userId, file) => {
-  const result = await uploadFile(userId, file, 'profile-photos');
-  return result || null;
-};
-
-// Update seeker profile with both resume and photo
 export const updateSeekerProfile = async (userId, profileData, resumeFile = null, photoFile = null) => {
   try {
     const userRef = doc(db, 'users', userId);
-    
-    console.log('Starting comprehensive profile update for user:', userId);
-    console.log('Profile data:', profileData);
-    console.log('Resume file:', resumeFile?.name || 'none');
-    console.log('Photo file:', photoFile?.name || 'none');
-    
-    // Get existing user data to check for old files
     const userDoc = await getDoc(userRef);
     const existingData = userDoc.exists() ? userDoc.data() : {};
-    
+
     let resumeResult = null;
     let photoResult = null;
-    
-    // Handle resume upload
+
+    // Handle uploads
     if (resumeFile) {
-      try {
-        // Delete old resume if exists
-        if (existingData.resumeStoragePath) {
-          await deleteOldFile(existingData.resumeStoragePath);
-        }
-        
-        resumeResult = await uploadFile(userId, resumeFile, 'resumes');
-        console.log('✅ Resume uploaded successfully');
-      } catch (uploadError) {
-        console.error('⚠️ Failed to upload resume:', uploadError);
-        // Continue with profile update even if resume upload fails
-      }
+      console.log('📤 Uploading resume file:', resumeFile.name, resumeFile.type, resumeFile.size);
+      resumeResult = await uploadFile(userId, resumeFile, 'resumes');
     }
-    
-    // Handle profile photo upload
     if (photoFile) {
-      try {
-        // Delete old photo if exists
-        if (existingData.photoStoragePath) {
-          await deleteOldFile(existingData.photoStoragePath);
+      console.log('📤 Uploading photo file:', photoFile.name, photoFile.type, photoFile.size);
+      photoResult = await uploadFile(userId, photoFile, 'profile-photos');
+    }
+
+    // ✅ Build updateData AFTER uploads
+    const updateData = {
+      // Core fields
+      fullName: profileData.fullName || '',
+      phone: profileData.phone || '',
+      location: profileData.location || '',
+      headline: profileData.headline || '',
+      skills: profileData.skills || [],
+      experienceLevel: profileData.experienceLevel || '',
+      education: profileData.education || [],
+      profileCompleted: true,
+      updatedAt: serverTimestamp(),
+      lastProfileUpdate: serverTimestamp(),
+      createdAt: existingData.createdAt || serverTimestamp(),
+
+      // Preserve role!
+      role: existingData.role || 'seeker',
+    };
+
+    // Add files if uploaded
+    if (resumeResult) {
+      console.log('📄 Resume upload successful:', resumeResult.url);
+      updateData.resumeURL = resumeResult.url;
+      updateData.resumeFileName = resumeResult.fileName;
+      updateData.resumePublicId = resumeResult.publicId;
+      
+      // ✅ FIX: Ensure PDF URLs use raw/upload not image/upload
+      if (resumeFile && resumeFile.type === 'application/pdf') {
+        if (resumeResult.url.includes('/image/upload/')) {
+          updateData.resumeURL = resumeResult.url;
+          console.log('🔄 Converted resume URL to raw:', updateData.resumeURL);
         }
-        
-        photoResult = await uploadFile(userId, photoFile, 'profile-photos');
-        console.log('✅ Profile photo uploaded successfully');
-      } catch (uploadError) {
-        console.error('⚠️ Failed to upload profile photo:', uploadError);
-        // Continue with profile update even if photo upload fails
       }
     }
-    
-    // Prepare update data
-    // In your updateSeekerProfile function, ensure this part:
-const updateData = {
-  fullName: profileData.fullName || '', 
-  phone: profileData.phone || '',
-  location: profileData.location || '',
-  headline: profileData.headline || '',
-  skills: profileData.skills || [],
-  experienceLevel: profileData.experienceLevel || '',
-  education: profileData.education || [],
-  profileCompleted: true,
-  updatedAt: serverTimestamp(),
-  lastProfileUpdate: serverTimestamp(),
-};
-
-// ADD THESE LINES:
-if (profileData.photoURL) {
-  updateData.photoURL = profileData.photoURL;
-}
-if (profileData.photoFileName) {
-  updateData.photoFileName = profileData.photoFileName;
-}
-if (profileData.resumeURL) {
-  updateData.resumeURL = profileData.resumeURL;
-}
-if (profileData.resumeFileName) {
-  updateData.resumeFileName = profileData.resumeFileName;
-}
-    
-    // Add resume data
-// In updateSeekerProfile function:
+    // In updateSeekerProfile function, add this after getting resumeResult:
 if (resumeResult) {
-  updateData.resumeURL = resumeResult.url;
+  console.log('📄 Resume upload successful:', resumeResult.url);
+  
+  // ✅ FORCE RAW URL FOR PDFs
+  let resumeUrl = resumeResult.url;
+  if (resumeFile && resumeFile.type === 'application/pdf') {
+    if (resumeUrl.includes('/image/upload/')) {
+      resumeUrl = resumeUrl.replace('/image/upload/', '/raw/upload/');
+      console.log('🔄 Manual fix: Converted to raw URL:', resumeUrl);
+    }
+  }
+  
+  updateData.resumeURL = resumeUrl;
   updateData.resumeFileName = resumeResult.fileName;
-  updateData.resumePublicId = resumeResult.publicId;  // New field
+  updateData.resumePublicId = resumeResult.publicId;
 }
 
-if (photoResult) {
-  updateData.photoURL = photoResult.url;
-  updateData.photoFileName = photoResult.fileName;
-  updateData.photoPublicId = photoResult.publicId;  // New field
-}
-    
-    // Add timestamps
-    updateData.createdAt = existingData.createdAt || serverTimestamp();
-    
-    console.log('Final update data:', updateData);
-    
-    // Update or create document
+    if (photoResult) {
+      console.log('📷 Photo upload successful:', photoResult.url);
+      updateData.photoURL = photoResult.url;
+      updateData.photoFileName = photoResult.fileName;
+      updateData.photoPublicId = photoResult.publicId;
+    }
+
+    // Save
     if (userDoc.exists()) {
       await updateDoc(userRef, updateData);
     } else {
       await setDoc(userRef, updateData);
     }
-    
-    console.log('✅ Profile saved to Firestore successfully');
-    
-    return {
-      success: true,
-      data: updateData,
-      message: 'Profile updated successfully'
-    };
-    
+
+    console.log('✅ Profile saved successfully with data:', updateData);
+    return { success: true, data: updateData };
   } catch (error) {
     console.error('❌ Error saving profile:', error);
     throw new Error(`Failed to save profile: ${error.message}`);
   }
 };
 
-// Get comprehensive user profile
 export const getUserProfile = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-    
     if (userDoc.exists()) {
       const data = userDoc.data();
-      console.log('Retrieved comprehensive profile data:', {
-        hasPhoto: !!data.photoURL,
-        hasResume: !!data.resumeURL,
-        skillsCount: data.skills?.length || 0
-      });
+      
+      // ✅ FIX: Ensure resume URLs are correct for downloads
+      let resumeURL = data.resumeURL || '';
+      if (resumeURL && resumeURL.includes('/image/upload/')) {
+        // Convert image URLs to raw URLs for PDFs
+        if (data.resumeFileName && data.resumeFileName.endsWith('.pdf')) {
+          resumeURL = resumeURL.replace('/image/upload/', '/raw/upload/');
+          console.log('🔄 Fixed resume URL for download:', resumeURL);
+        }
+      }
       
       return {
-        // Personal Info
         fullName: data.fullName || '',
         phone: data.phone || '',
         location: data.location || '',
         headline: data.headline || '',
         email: data.email || '',
-        
-        // Skills & Experience
         skills: data.skills || [],
         experienceLevel: data.experienceLevel || '',
-        
-        // Education
         education: data.education || [],
-        
-        // Files
-        resumeURL: data.resumeURL || '',
+        resumeURL: resumeURL,
         resumeFileName: data.resumeFileName || '',
-        resumeStoragePath: data.resumeStoragePath || '',
-        
         photoURL: data.photoURL || '',
         photoFileName: data.photoFileName || '',
-        photoStoragePath: data.photoStoragePath || '',
-        
-        // Metadata
         profileCompleted: data.profileCompleted || false,
         createdAt: data.createdAt?.toDate?.() || null,
         updatedAt: data.updatedAt?.toDate?.() || null,
-        
-        // Additional fields
         jobTitle: data.jobTitle || '',
         about: data.about || '',
         socialLinks: data.socialLinks || {},
@@ -230,65 +166,9 @@ export const getUserProfile = async (userId) => {
         salaryExpectation: data.salaryExpectation || ''
       };
     }
-    
-    console.log('No user document found for ID:', userId);
     return null;
   } catch (error) {
     console.error('❌ Error getting profile:', error);
-    throw error;
-  }
-};
-
-// Delete user files (for account cleanup)
-export const deleteUserFiles = async (userId) => {
-  try {
-    console.log('Cleaning up files for user:', userId);
-    
-    // Get user data first
-    const userRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userRef);
-    
-    if (!userDoc.exists()) {
-      console.log('No user data found, nothing to delete');
-      return;
-    }
-    
-    const userData = userDoc.data();
-    
-    // Delete resume if exists
-    if (userData.resumeStoragePath) {
-      await deleteOldFile(userData.resumeStoragePath);
-    }
-    
-    // Delete profile photo if exists
-    if (userData.photoStoragePath) {
-      await deleteOldFile(userData.photoStoragePath);
-    }
-    
-    console.log('✅ User files cleaned up successfully');
-  } catch (error) {
-    console.error('❌ Error deleting user files:', error);
-    throw error;
-  }
-};
-
-// Update only specific profile fields
-export const updatePartialProfile = async (userId, updateFields) => {
-  try {
-    const userRef = doc(db, 'users', userId);
-    
-    // Add update timestamp
-    const updateData = {
-      ...updateFields,
-      updatedAt: serverTimestamp()
-    };
-    
-    await updateDoc(userRef, updateData);
-    console.log('✅ Partial profile update successful');
-    
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Error in partial profile update:', error);
     throw error;
   }
 };

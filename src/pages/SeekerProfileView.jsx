@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getCloudinaryDownloadUrl, verifyDownloadUrl, logDownloadFallback } from '../services/cloudinary';
+import { downloadFileFromCloudinary } from '../services/cloudinary'; // ✅ Updated import
 import { useToast } from '../components/ToastContext';
 
 function SeekerProfileView() {
@@ -28,10 +28,69 @@ function SeekerProfileView() {
     try {
       await refreshProfileData();
       // Profile will update via useEffect
+      addToast('Profile refreshed successfully', 'success');
     } catch (error) {
       console.error('Error refreshing profile:', error);
+      addToast('Failed to refresh profile', 'error');
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  // Format experience level for better display
+  const formatExperienceLevel = (level) => {
+    const levels = {
+      'fresher': 'Fresher (0-1 year)',
+      'entry': 'Entry Level (1-3 years)',
+      'mid': 'Mid Level (3-7 years)',
+      'senior': 'Senior Level (7+ years)',
+      'executive': 'Executive Level'
+    };
+    return levels[level] || level;
+  };
+
+  // Format date for display
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'Recently';
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (error) {
+      return 'Recently';
+    }
+  };
+
+  // Get initials for avatar
+  const getInitials = () => {
+    if (profile?.fullName) {
+      return profile.fullName.charAt(0).toUpperCase();
+    }
+    if (currentUser?.email) {
+      return currentUser.email.charAt(0).toUpperCase();
+    }
+    return 'U';
+  };
+
+  // Handle resume download - ✅ SIMPLIFIED VERSION
+  const handleResumeDownload = () => {
+    if (!profile?.resumeURL) {
+      addToast('No resume available for download', 'error');
+      return;
+    }
+    
+    const fileName = profile.resumeFileName || 'resume.pdf';
+    
+    try {
+      const success = downloadFileFromCloudinary(profile.resumeURL, fileName);
+      
+      if (success) {
+        addToast('Resume download started', 'success');
+      } else {
+        addToast('Opening resume in browser', 'info');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      addToast('Failed to download resume. Please try again.', 'error');
     }
   };
 
@@ -69,40 +128,6 @@ function SeekerProfileView() {
       </div>
     );
   }
-
-  // Format experience level for better display
-  const formatExperienceLevel = (level) => {
-    const levels = {
-      'fresher': 'Fresher (0-1 year)',
-      'entry': 'Entry Level (1-3 years)',
-      'mid': 'Mid Level (3-7 years)',
-      'senior': 'Senior Level (7+ years)',
-      'executive': 'Executive Level'
-    };
-    return levels[level] || level;
-  };
-
-  // Format date for display
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'Recently';
-    try {
-      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch (error) {
-      return 'Recently';
-    }
-  };
-
-  // Get initials for avatar
-  const getInitials = () => {
-    if (profile.fullName) {
-      return profile.fullName.charAt(0).toUpperCase();
-    }
-    if (currentUser?.email) {
-      return currentUser.email.charAt(0).toUpperCase();
-    }
-    return 'U';
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-emerald-50 py-8 px-4">
@@ -339,34 +364,9 @@ function SeekerProfileView() {
                   {profile.resumeURL ? (
                     <>
                       <button
-    onClick={async () => {
-      // Create download link
-      let downloadUrl = profile.resumeURL;
-      const fileName = profile.resumeFileName || 'resume.pdf';
-      
-      // Build a robust download URL that handles Cloudinary specifics and filename
-      const candidate = getCloudinaryDownloadUrl(downloadUrl, fileName);
-
-      const ok = await verifyDownloadUrl(candidate);
-
-      if (ok) {
-        // Trigger download
-        const link = document.createElement('a');
-        link.href = candidate;
-        link.download = fileName;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else {
-        // Fallback to opening original URL and show toast
-        window.open(profile.resumeURL, '_blank', 'noopener,noreferrer');
-        addToast('Download failed; opened resume in a new tab.', 'warning');
-        try { logDownloadFallback(profile.resumeURL, candidate, fileName, 'verify_failed'); } catch (e) { /* ignore */ }
-      }
-    }}
-    className="group w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl p-4 text-center hover:from-emerald-600 hover:to-teal-600 transition-all duration-300 shadow-soft hover:shadow-lg transform hover:-translate-y-0.5 mb-4"
-  >
+                        onClick={handleResumeDownload}
+                        className="group w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl p-4 text-center hover:from-emerald-600 hover:to-teal-600 transition-all duration-300 shadow-soft hover:shadow-lg transform hover:-translate-y-0.5 mb-4"
+                      >
                         <div className="flex items-center justify-center mb-2">
                           <svg className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -378,7 +378,7 @@ function SeekerProfileView() {
                         </p>
                       </button>
                       <div className="text-xs text-gray-500 text-center">
-                        Click to download from Cloudinary
+                        Click to download your resume
                       </div>
                     </>
                   ) : (
