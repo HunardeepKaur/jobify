@@ -3,13 +3,14 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC-9x8lKEc7b_Dq8K3-TqlBKpRKXbrGgpA",
-  authDomain: "jobify-c4829.firebaseapp.com",
-  projectId: "jobify-c4829",
-  storageBucket: "jobify-c4829.firebasestorage.app",
-  messagingSenderId: "1028796771726",
-  appId: "1:1028796771726:web:f704162494bc95f96c08df"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
+
 
 const app = initializeApp(firebaseConfig);
 
